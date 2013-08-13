@@ -28,6 +28,11 @@ Layer hand_layer;
 Layer sunlight_layer;
 Layer sunrise_sunset_text_layer;
 Layer moon_layer;
+int current_moon_day = -1;
+int phase;
+int current_sunrise_sunset_day = -1;
+float sunriseTime;
+float sunsetTime;
 
 int moon_phase(PblTm *time) {
   int y,m;
@@ -56,7 +61,14 @@ GPathInfo sun_path_moon_mask_info = {
 static void moon_layer_update_proc(Layer* layer, GContext* ctx) {
   PblTm time;
   get_time(&time);
-  int phase = moon_phase(&time);
+
+  // don't do any calculations if they've already been done for today.
+  if (current_moon_day != time.tm_mday) {
+    phase = moon_phase(&time);
+    // we don't have to calculate this again until tomorrow...
+    current_moon_day = time.tm_mday;
+  }
+
   int moon_y = 108;  // y-axis position of the moon's center
   int moon_r = 15;   // radius of the moon
 
@@ -305,11 +317,16 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   get_time(&sunset_time);
 
   get_time(&time);
-  float sunriseTime = calcSunRise(time.tm_year, time.tm_mon+1, time.tm_mday, LATITUDE, LONGITUDE, 91.0f);
-  float sunsetTime = calcSunSet(time.tm_year, time.tm_mon+1, time.tm_mday, LATITUDE, LONGITUDE, 91.0f);
 
-  adjustTimezone(&sunriseTime);
-  adjustTimezone(&sunsetTime);
+  // don't calculate these if they've already been done for the day.
+  if (current_sunrise_sunset_day != time.tm_mday) {
+    sunriseTime = calcSunRise(time.tm_year, time.tm_mon+1, time.tm_mday, LATITUDE, LONGITUDE, 91.0f);
+    sunsetTime = calcSunSet(time.tm_year, time.tm_mon+1, time.tm_mday, LATITUDE, LONGITUDE, 91.0f);
+    adjustTimezone(&sunriseTime);
+    adjustTimezone(&sunsetTime);
+    // don't calculate them again until tomorrow
+    current_sunrise_sunset_day = time.tm_mday;
+  }
 
   // print sunrise/sunset times
   sunrise_time.tm_min = (int)(60*(sunriseTime-((int)(sunriseTime))));
