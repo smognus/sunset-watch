@@ -108,9 +108,10 @@ static void moon_layer_update_proc(Layer* layer, GContext* ctx) {
 
 void adjustTimezone(float* time) 
 {
-  *time += TIMEZONE;
-  if (*time > 24) *time -= 24;
-  if (*time < 0) *time += 24;
+  int corrected_time = 12 + TIMEZONE;
+  *time += corrected_time;
+    if (*time > 24) *time -= 24;
+    if (*time < 0) *time += 24;
 }
 
 static void draw_dot(GContext* ctx, GPoint center, int radius) {
