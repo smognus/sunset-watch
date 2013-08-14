@@ -7,7 +7,7 @@ It is a 24hour face with an hour hand and a second hand. Sunrise/sunset times ar
 
 This is a rewrite of the watchface at https://github.com/KarbonPebbler/KP_Sun_Moon_Vibe_Clock, which was badly broken by SDK changes. This version uses no bitmaps, and since the GCompOps aren't working for vector stuff yet, it does some truly silly stuff to simulate transparency.
 
-To make it work for your location, modify config.h for your Latitude and Longitude and Timezone (although you may have to fiddle with the timezone... I seem to to have needed to go +5 instead of +7...).
+To make it work for your location, modify config.h for your Latitude and Longitude and Timezone.
 
 The original author is KarbonPebbler, and he adds the additional credits to his project:
 
