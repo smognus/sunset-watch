@@ -77,18 +77,24 @@ static void moon_layer_update_proc(Layer* layer, GContext* ctx) {
     graphics_context_set_fill_color(ctx,GColorWhite);
     graphics_fill_circle(ctx, GPoint(72,moon_y), moon_r);
   }
-  if (phase == 27) {
+  if (phase == 27 || phase == 0) {
     graphics_context_set_stroke_color(ctx,GColorWhite);
     graphics_draw_circle(ctx, GPoint(72,moon_y), moon_r);
   }
 
   if (phase != 15 && phase != 27 ) { 
-    // draw the waxing occlusion...
-    graphics_context_set_fill_color(ctx,GColorBlack);
-    graphics_fill_circle(ctx, GPoint(72-((phase * 2) + 3),moon_y), moon_r);
-    // draw the waning occlusion...
-    graphics_context_set_fill_color(ctx,GColorBlack);
-    graphics_fill_circle(ctx, GPoint(132-((phase * 2) + 3),moon_y), moon_r);
+    if (phase < 15) {
+      // draw the waxing occlusion...
+      graphics_context_set_fill_color(ctx,GColorBlack);
+      graphics_fill_circle(ctx, GPoint(72 - (phase * 6), moon_y), moon_r + (phase * 4));
+    }
+
+    if (phase > 15) {
+      // draw the waning occlusion...
+      int phase_factor = abs(phase-30);
+      graphics_context_set_fill_color(ctx,GColorBlack);
+      graphics_fill_circle(ctx, GPoint(((72-3) + (phase_factor * 6)), moon_y), moon_r + (phase_factor * 4));
+    }
   }
 
   // mask off the "daylight" portion of the watchface, otherwise, we
