@@ -253,7 +253,7 @@ static void clockface_layer_update_proc(Layer* layer, GContext* ctx) {
     draw_outlined_text(ctx,
   		       hour_text,
   		       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-  		       GRect(current_point.x-10, current_point.y-12, 20, 20),
+  		       GRect(current_point.x-10, current_point.y-12, 20, 30),
   		       GTextOverflowModeWordWrap,
   		       GTextAlignmentCenter,
   		       1,
@@ -345,15 +345,19 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   graphics_context_set_text_color(ctx, GColorWhite);
   graphics_text_draw(ctx,
 		     sunrise_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-		     GRect(3, 145, 144-3, 168-145),
+		     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+
+		     //		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		     GRect(3, 142, 144-3, 168-130),
 		     GTextOverflowModeWordWrap,
 		     GTextAlignmentLeft,
 		     NULL);
   graphics_text_draw(ctx,
 		     sunset_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-		     GRect(3, 145, 144-3, 168-145),
+		     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+
+		     //		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		     GRect(3, 142, 144-8, 168-130),
 		     GTextOverflowModeWordWrap,
 		     GTextAlignmentRight,
 		     NULL);
@@ -362,19 +366,21 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   string_format_time(time_text, sizeof(time_text), time_format, &time);
   draw_outlined_text(ctx,
 		     time_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
-		     GRect(42, 47, 64, 32),
+		     fonts_get_system_font(FONT_KEY_DROID_SERIF_28_BOLD),
+		     GRect(0, 50, 144, 90),
+		     //		     GRect(0, 100, 144, 90),
   		     GTextOverflowModeWordWrap,
   		     GTextAlignmentCenter,
-		     1,
+		     2,
 		     false);
 
   //draw current date month
   string_format_time(month_text, sizeof(month_text), month_format, &time);
   draw_outlined_text(ctx,
 		     month_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-		     GRect(3, 0, 144-3, 32),
+		     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+		     //		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		     GRect(3, -4, 144-3, 32),
   		     GTextOverflowModeWordWrap,
   		     GTextAlignmentLeft,
 		     0,
@@ -383,8 +389,10 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   string_format_time(day_text, sizeof(day_text), day_format, &time);
   draw_outlined_text(ctx,
 		     day_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-		     GRect(3, 0, 144-13, 32),
+		     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+
+		     //		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		     GRect(3, -4, 144-13, 32),
   		     GTextOverflowModeWordWrap,
   		     GTextAlignmentRight,
 		     0,
