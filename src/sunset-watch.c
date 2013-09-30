@@ -316,7 +316,7 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   static char time_text[] = "     ";
   static char month_text[] = "   ";
   static char day_text[] = "  ";
-  char *time_format = "%l:%M";
+  char *time_format = "%H:%M";
   char *month_format = "%b";
   char *day_format = "%e";
   // probably don't really need to do this, but it populates everything nicely...
@@ -337,10 +337,10 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
 
   // print sunrise/sunset times
   sunrise_time.tm_min = (int)(60*(sunriseTime-((int)(sunriseTime))));
-  sunrise_time.tm_hour = (int)sunriseTime;
+  sunrise_time.tm_hour = (int)sunriseTime - 12;
   string_format_time(sunrise_text, sizeof(sunrise_text), time_format, &sunrise_time);
   sunset_time.tm_min = (int)(60*(sunsetTime-((int)(sunsetTime))));
-  sunset_time.tm_hour = (int)sunsetTime;
+  sunset_time.tm_hour = (int)sunsetTime + 12;
   string_format_time(sunset_text, sizeof(sunset_text), time_format, &sunset_time);
   graphics_context_set_text_color(ctx, GColorWhite);
   graphics_text_draw(ctx,
@@ -471,13 +471,13 @@ static void hand_layer_update_proc(Layer* layer, GContext* ctx) {
   gpath_draw_outline(ctx, &p_hour_hand);
 
   // draw the second hand
-  graphics_context_set_stroke_color(ctx, GColorBlack);
-  gpath_init(&p_second_hand, &p_second_hand_info);
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  gpath_move_to(&p_second_hand, center);
-  gpath_rotate_to(&p_second_hand, TRIG_MAX_ANGLE / 360 * second_angle);
-  gpath_draw_filled(ctx, &p_second_hand);
-  gpath_draw_outline(ctx, &p_second_hand);
+  /* graphics_context_set_stroke_color(ctx, GColorBlack); */
+  /* gpath_init(&p_second_hand, &p_second_hand_info); */
+  /* graphics_context_set_fill_color(ctx, GColorWhite); */
+  /* gpath_move_to(&p_second_hand, center); */
+  /* gpath_rotate_to(&p_second_hand, TRIG_MAX_ANGLE / 360 * second_angle); */
+  /* gpath_draw_filled(ctx, &p_second_hand); */
+  /* gpath_draw_outline(ctx, &p_second_hand); */
 }
 
 void handle_init(AppContextRef ctx) {
@@ -516,7 +516,7 @@ void pbl_main(void *params) {
     .deinit_handler = &handle_deinit,
     .tick_info = {
       .tick_handler = &handle_tick,
-      .tick_units = SECOND_UNIT
+      .tick_units = MINUTE_UNIT
     }
   };
   app_event_loop(params, &handlers);
