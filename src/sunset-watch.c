@@ -351,6 +351,8 @@ static void hand_layer_update_proc(Layer* layer, GContext* ctx) {
   /* gpath_rotate_to(&p_second_hand, TRIG_MAX_ANGLE / 360 * second_angle); */
   /* gpath_draw_filled(ctx, &p_second_hand); */
   /* gpath_draw_outline(ctx, &p_second_hand); */
+
+  gpath_destroy(p_hour_hand);
 }
 
 GPathInfo sun_path_moon_mask_info = {
