@@ -14,10 +14,123 @@ int current_moon_day = -1;
 float sunriseTime;
 float sunsetTime;
 int phase;
+double lat;
+double lon;
+double tz;
+bool position = false;
+
+// Since compilation fails using the standard `atof',
+// the following `myatof' implementation taken from:
+// 09-May-2009 Tom Van Baak (tvb) www.LeapSecond.com
+// 
+#define white_space(c) ((c) == ' ' || (c) == '\t')
+#define valid_digit(c) ((c) >= '0' && (c) <= '9')
+double myatof (const char *p)
+{
+    int frac;
+    double sign, value, scale;
+    // Skip leading white space, if any.
+    while (white_space(*p) ) {
+        p += 1;
+    }
+    // Get sign, if any.
+    sign = 1.0;
+    if (*p == '-') {
+        sign = -1.0;
+        p += 1;
+    } else if (*p == '+') {
+        p += 1;
+    }
+    // Get digits before decimal point or exponent, if any.
+    for (value = 0.0; valid_digit(*p); p += 1) {
+        value = value * 10.0 + (*p - '0');
+    }
+    // Get digits after decimal point, if any.
+    if (*p == '.') {
+        double pow10 = 10.0;
+        p += 1;
+        while (valid_digit(*p)) {
+            value += (*p - '0') / pow10;
+            pow10 *= 10.0;
+            p += 1;
+        }
+    }
+    // Handle exponent, if any.
+    frac = 0;
+    scale = 1.0;
+    if ((*p == 'e') || (*p == 'E')) {
+        unsigned int expon;
+        // Get sign of exponent, if any.
+        p += 1;
+        if (*p == '-') {
+            frac = 1;
+            p += 1;
+
+        } else if (*p == '+') {
+            p += 1;
+        }
+        // Get digits of exponent, if any.
+        for (expon = 0; valid_digit(*p); p += 1) {
+            expon = expon * 10 + (*p - '0');
+        }
+        if (expon > 308) expon = 308;
+        // Calculate scaling factor.
+        while (expon >= 50) { scale *= 1E50; expon -= 50; }
+        while (expon >=  8) { scale *= 1E8;  expon -=  8; }
+        while (expon >   0) { scale *= 10.0; expon -=  1; }
+    }
+    // Return signed and scaled floating point result.
+    return sign * (frac ? (value / scale) : (value * scale));
+}
+
+double round(double number)
+{
+    return (number >= 0) ? (int)(number + 0.5) : (int)(number - 0.5);
+}
+
+/******************
+  APPMESSAGE STUFF
+*******************/
+enum {
+  LAT = 0x1,
+  LON = 0X2,
+};
+
+void in_received_handler(DictionaryIterator *received, void *ctx) {
+  Tuple *latitude = dict_find(received, LAT);
+  Tuple *longitude = dict_find(received, LON);
+
+  if (latitude && longitude) {
+    lat = myatof(latitude->value->cstring);
+    lon = myatof(longitude->value->cstring);
+    
+    // this is really rough... don't know how well it will actually work
+    // in different parts of the world...
+    
+    tz = round((lon * 24) / 360);
+
+    position = true;
+
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", latitude->value->cstring);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", longitude->value->cstring);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Rough TZ: %d.", (int) tz);
+
+    // without marking one of the layers dirty,
+    // we have to wait until the next tick_event
+    // to see the new masks.
+    layer_mark_dirty(face_layer);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Redrawing...");
+  }
+}
+
+void in_dropped_handler(AppMessageResult reason, void *context) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch dropped data.");
+}
+
 
 void adjustTimezone(float* time) 
 {
-  int corrected_time = 12 + TIMEZONE;
+  int corrected_time = 12 + tz;
   *time += corrected_time;
     if (*time > 24) *time -= 24;
     if (*time < 0) *time += 24;
@@ -187,7 +300,7 @@ static void face_layer_update_proc(Layer *layer, GContext *ctx) {
     draw_outlined_text(ctx,
   		       hour_text,
   		       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-  		       GRect(current_point.x-10, current_point.y-12, 20, 30),
+  		       GRect(current_point.x-10, current_point.y-12, 20, 20),
   		       GTextOverflowModeWordWrap,
   		       GTextAlignmentCenter,
   		       1,
@@ -203,10 +316,10 @@ static const GPathInfo p_hour_hand_info = {
   .points = (GPoint []) {{4,0},{0,8},{-4,0},{-3,-60},{0,-65},{3,-60}}
 };
 
-  static const GPathInfo p_second_hand_info = {
-    .num_points = 6,
-    .points = (GPoint []) {{4,0},{0,8},{-4,0},{-3,-60},{0,-65},{3,-60}}
-  };
+static const GPathInfo p_second_hand_info = {
+  .num_points = 6,
+  .points = (GPoint []) {{4,0},{0,8},{-4,0},{-3,-60},{0,-65},{3,-60}}
+};
 
 static void hand_layer_update_proc(Layer* layer, GContext* ctx) {
   GRect bounds = layer_get_bounds(layer);
@@ -243,6 +356,9 @@ static void hand_layer_update_proc(Layer* layer, GContext* ctx) {
   gpath_rotate_to(p_second_hand, TRIG_MAX_ANGLE / 360 * second_angle);
   gpath_draw_filled(ctx, p_second_hand);
   gpath_draw_outline(ctx, p_second_hand);
+
+  gpath_destroy(p_hour_hand);
+  gpath_destroy(p_second_hand);
 }
 
 GPathInfo sun_path_moon_mask_info = {
@@ -276,8 +392,8 @@ static void sunlight_layer_update_proc(Layer* layer, GContext* ctx) {
   /* struct tm *sunrise_time = localtime(&now_epoch); */
   /* struct tm *sunset_time = localtime(&now_epoch); */
 
-  float sunriseTime = calcSunRise(time->tm_year, time->tm_mon+1, time->tm_mday, LATITUDE, LONGITUDE, 91.0f);
-  float sunsetTime = calcSunSet(time->tm_year, time->tm_mon+1, time->tm_mday, LATITUDE, LONGITUDE, 91.0f);
+  float sunriseTime = calcSunRise(time->tm_year, time->tm_mon+1, time->tm_mday, lat, lon, 91.0f);
+  float sunsetTime = calcSunSet(time->tm_year, time->tm_mon+1, time->tm_mday, lat, lon, 91.0f);
 
   adjustTimezone(&sunriseTime);
   adjustTimezone(&sunsetTime);
@@ -299,8 +415,10 @@ static void sunlight_layer_update_proc(Layer* layer, GContext* ctx) {
   graphics_context_set_stroke_color(ctx, GColorBlack);
   graphics_context_set_fill_color(ctx, GColorBlack);
   gpath_move_to(sun_path, center);
-  gpath_draw_outline(ctx, sun_path);
-  gpath_draw_filled(ctx, sun_path);
+  if (position) {
+    gpath_draw_outline(ctx, sun_path);
+    gpath_draw_filled(ctx, sun_path);
+  }
 }
 
 static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
@@ -313,22 +431,26 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   static char time_text[] = "     ";
   static char month_text[] = "   ";
   static char day_text[] = "  ";
-  char *time_format = "%l:%M";
+  char *time_format = "%H:%M";
   char *month_format = "%b";
   char *day_format = "%e";
+  char *ellipsis = ".....";
 
-  // don't calculate these if they've already been done for the day.
-  if (current_sunrise_sunset_day != now->tm_mday) {
-    sunriseTime = calcSunRise(now->tm_year, now->tm_mon+1, now->tm_mday, LATITUDE, LONGITUDE, 91.0f);
-    sunsetTime = calcSunSet(now->tm_year, now->tm_mon+1, now->tm_mday, LATITUDE, LONGITUDE, 91.0f);
+  // don't calculate these if they've already been done for the day or if `lat' and `lon' haven't
+  // been received from the phone yet.
+  if ((current_sunrise_sunset_day != now->tm_mday)) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Re-calculating sunrise/sunset...");
+    sunriseTime = calcSunRise(now->tm_year, now->tm_mon+1, now->tm_mday, lat, lon, 91.0f);
+    sunsetTime = calcSunSet(now->tm_year, now->tm_mon+1, now->tm_mday, lat, lon, 91.0f);
     adjustTimezone(&sunriseTime);
     adjustTimezone(&sunsetTime);
-    // don't calculate them again until tomorrow
-    current_sunrise_sunset_day = now->tm_mday;
+    // don't calculate them again until tomorrow (unless we still don't have position)
+    if (position) {
+      current_sunrise_sunset_day = now->tm_mday;
+    }
   }
 
-  // draw current time (modify for 12-hour display)
-  (now->tm_hour > 12) ? now->tm_hour-=12 : true;
+  // draw current time
   strftime(time_text, sizeof(time_text), time_format, now);
   draw_outlined_text(ctx,
 		     time_text,
@@ -339,9 +461,7 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
 		     1,
 		     false);
 
-  // print sunrise/sunset times (modify for 12-hour display)
-  (sunrise_time->tm_hour > 12) ? sunrise_time->tm_hour-=12 : true;
-  (sunset_time->tm_hour > 12) ? sunset_time->tm_hour-=12 : true;
+  // print sunrise/sunset times (if we can calculate our position)
   sunrise_time->tm_min = (int)(60*(sunriseTime-((int)(sunriseTime))));
   sunrise_time->tm_hour = (int)sunriseTime - 12;
   strftime(sunrise_text, sizeof(sunrise_text), time_format, sunrise_time);
@@ -349,47 +469,46 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   sunset_time->tm_hour = (int)sunsetTime + 12;
   strftime(sunset_text, sizeof(sunset_text), time_format, sunset_time);
   graphics_context_set_text_color(ctx, GColorWhite);
-  graphics_draw_text(ctx,
-		     sunrise_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
 
-		     //		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-		     GRect(3, 142, 144-3, 168-130),
-		     GTextOverflowModeWordWrap,
-		     GTextAlignmentLeft,
-		     NULL);
-  graphics_draw_text(ctx,
-		     sunset_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+  if (position) {
+    graphics_draw_text(ctx,
+		       sunrise_text,
+		       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		       GRect(3, 145, 144-3, 168-145),
+		       GTextOverflowModeWordWrap,
+		       GTextAlignmentLeft,
+		       NULL);
+    graphics_draw_text(ctx,
+		       sunset_text,
+		       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		       GRect(3, 145, 144-3, 168-145),
+		       GTextOverflowModeWordWrap,
+		       GTextAlignmentRight,
+		       NULL);
+  }
+  else {
+    graphics_draw_text(ctx,
+		       ellipsis,
+		       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		       GRect(3, 145, 144-3, 168-145),
+		       GTextOverflowModeWordWrap,
+		       GTextAlignmentLeft,
+		       NULL);
+    graphics_draw_text(ctx,
+		       ellipsis,
+		       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		       GRect(3, 145, 144-3, 168-145),
+		       GTextOverflowModeWordWrap,
+		       GTextAlignmentRight,
+		       NULL);
+  }
 
-		     //		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-		     GRect(3, 142, 144-8, 168-130),
-		     GTextOverflowModeWordWrap,
-		     GTextAlignmentRight,
-		     NULL);
-
-<<<<<<< HEAD
-=======
-  // draw current time
-  string_format_time(time_text, sizeof(time_text), time_format, &time);
-  draw_outlined_text(ctx,
-		     time_text,
-		     fonts_get_system_font(FONT_KEY_DROID_SERIF_28_BOLD),
-		     GRect(0, 50, 144, 90),
-		     //		     GRect(0, 100, 144, 90),
-  		     GTextOverflowModeWordWrap,
-  		     GTextAlignmentCenter,
-		     2,
-		     false);
-
->>>>>>> 212d48872bc6babd5d2681783e83b5a055e552d5
   //draw current date month
   strftime(month_text, sizeof(month_text), month_format, now);
   draw_outlined_text(ctx,
 		     month_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-		     //		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-		     GRect(3, -4, 144-3, 32),
+		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		     GRect(3, 0, 144-3, 32),
   		     GTextOverflowModeWordWrap,
   		     GTextAlignmentLeft,
 		     0,
@@ -398,10 +517,8 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   strftime(day_text, sizeof(day_text), day_format, now);
   draw_outlined_text(ctx,
 		     day_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-
-		     //		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-		     GRect(3, -4, 144-13, 32),
+		     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		     GRect(3, 0, 144-13, 32),
   		     GTextOverflowModeWordWrap,
   		     GTextAlignmentRight,
 		     0,
@@ -436,27 +553,29 @@ static void moon_layer_update_proc(Layer* layer, GContext* ctx) {
   int moon_r = 15;   // radius of the moon
 
   // draw the moon...
-  if (phase != 27) {
-    graphics_context_set_fill_color(ctx,GColorWhite);
-    graphics_fill_circle(ctx, GPoint(72,moon_y), moon_r);
-  }
-  if (phase == 27 || phase == 0) {
-    graphics_context_set_stroke_color(ctx,GColorWhite);
-    graphics_draw_circle(ctx, GPoint(72,moon_y), moon_r);
-  }
-
-  if (phase != 15 && phase != 27 ) { 
-    if (phase < 15) {
-      // draw the waxing occlusion...
-      graphics_context_set_fill_color(ctx,GColorBlack);
-      graphics_fill_circle(ctx, GPoint(72 - (phase * 6), moon_y), moon_r + (phase * 4));
+  if (position) {
+    if (phase != 27) {
+      graphics_context_set_fill_color(ctx,GColorWhite);
+      graphics_fill_circle(ctx, GPoint(72,moon_y), moon_r);
+    }
+    if (phase == 27 || phase == 0) {
+      graphics_context_set_stroke_color(ctx,GColorWhite);
+      graphics_draw_circle(ctx, GPoint(72,moon_y), moon_r);
     }
 
-    if (phase > 15) {
-      // draw the waning occlusion...
-      int phase_factor = abs(phase-30);
-      graphics_context_set_fill_color(ctx,GColorBlack);
-      graphics_fill_circle(ctx, GPoint(((72-3) + (phase_factor * 6)), moon_y), moon_r + (phase_factor * 4));
+    if (phase != 15 && phase != 27 ) { 
+      if (phase < 15) {
+	// draw the waxing occlusion...
+	graphics_context_set_fill_color(ctx,GColorBlack);
+	graphics_fill_circle(ctx, GPoint(72 - (phase * 6), moon_y), moon_r + (phase * 4));
+      }
+
+      if (phase > 15) {
+	// draw the waning occlusion...
+	int phase_factor = abs(phase-30);
+	graphics_context_set_fill_color(ctx,GColorBlack);
+	graphics_fill_circle(ctx, GPoint(((72-3) + (phase_factor * 6)), moon_y), moon_r + (phase_factor * 4));
+      }
     }
   }
 
@@ -471,11 +590,14 @@ static void moon_layer_update_proc(Layer* layer, GContext* ctx) {
   graphics_context_set_stroke_color(ctx, GColorBlack);
   graphics_context_set_fill_color(ctx, GColorWhite);
   gpath_move_to(sun_path_moon_mask, center);
-  gpath_draw_outline(ctx, sun_path_moon_mask);
-  gpath_draw_filled(ctx, sun_path_moon_mask);
+  if (position) {
+    gpath_draw_outline(ctx, sun_path_moon_mask);
+    gpath_draw_filled(ctx, sun_path_moon_mask);
+  }
 }
 
 static void window_unload(Window *window) {
+
 }
 
 static void window_load(Window *window) {
@@ -508,11 +630,20 @@ static void window_load(Window *window) {
   layer_add_child(window_layer, sunrise_sunset_text_layer);
 }
 
-static void handle_second_tick(struct tm *tick_time, TimeUnits units_changed) {
+static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
   layer_mark_dirty(face_layer);
 }
 
 static void init(void) {
+  app_message_register_inbox_received(in_received_handler);
+  app_message_register_inbox_dropped(in_dropped_handler);
+  //  app_message_register_outbox_sent(out_sent_handler);
+  //  app_message_register_outbox_failed(out_failed_handler);
+
+  const uint32_t inbound_size = 64;
+  const uint32_t outbound_size = 64;
+  app_message_open(inbound_size, outbound_size);
+
   window = window_create();
   window_set_window_handlers(window, (WindowHandlers) {
       .load = window_load,
@@ -521,19 +652,15 @@ static void init(void) {
   const bool animated = true;
   window_stack_push(window, animated);
 
-  tick_timer_service_subscribe(SECOND_UNIT, handle_second_tick);
+  tick_timer_service_subscribe(SECOND_UNIT, handle_minute_tick);
 }
 
 static void deinit(void) {
   layer_remove_from_parent(moon_layer);
   layer_remove_from_parent(hand_layer);
-  //  delay_and_redraw(500);
   layer_remove_from_parent(sunlight_layer);
-  //  delay_and_redraw(500);
   layer_remove_from_parent(sunrise_sunset_text_layer);
-  //  delay_and_redraw(500);
   layer_remove_from_parent(face_layer);
-  //  delay_and_redraw(500);
 
   layer_destroy(face_layer);
   layer_destroy(hand_layer);
