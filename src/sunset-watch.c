@@ -16,7 +16,7 @@ float sunsetTime;
 int phase;
 double lat;
 double lon;
-int tz;
+double tz;
 bool position = false;
 
 // Since compilation fails using the standard `atof',
@@ -83,6 +83,11 @@ double myatof (const char *p)
     return sign * (frac ? (value / scale) : (value * scale));
 }
 
+double round(double number)
+{
+    return (number >= 0) ? (int)(number + 0.5) : (int)(number - 0.5);
+}
+
 /******************
   APPMESSAGE STUFF
 *******************/
@@ -101,13 +106,14 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
     
     // this is really rough... don't know how well it will actually work
     // in different parts of the world...
-    tz = (lon * 24) / 360;
+    
+    tz = round((lon * 24) / 360);
 
     position = true;
 
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", latitude->value->cstring);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", longitude->value->cstring);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Rough TZ: %d.", tz);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Rough TZ: %d.", (int) tz);
 
     // without marking one of the layers dirty,
     // we have to wait until the next tick_event
