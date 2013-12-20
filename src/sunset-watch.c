@@ -431,7 +431,7 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   static char time_text[] = "     ";
   static char month_text[] = "   ";
   static char day_text[] = "  ";
-  char *time_format = "%H:%M";
+  char *time_format = "%l:%M";
   char *month_format = "%b";
   char *day_format = "%e";
   char *ellipsis = ".....";
