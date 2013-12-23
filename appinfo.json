@@ -13,7 +13,9 @@
     "latitude": 1,
     "longitude": 2,
     "second_hand": 3,
-    "digital_display": 4
+    "digital_display": 4,
+    "hour_numbers": 5,
+    "moon_phase": 6
   },
   "resources": {
     "media": []

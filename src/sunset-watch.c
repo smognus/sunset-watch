@@ -20,8 +20,10 @@ double tz;
 bool position = false;
 bool setting_second_hand = true; // show second hand by default
                                  // will be disabled if a setting already exists.
-bool setting_digital_display = true; // show second hand by default
+bool setting_digital_display = true; // show digital display by default
                                  // will be disabled if a setting already exists.
+bool setting_hour_numbers = true;
+bool setting_moon_phase = true;
 
 // Since compilation fails using the standard `atof',
 // the following `myatof' implementation taken from:
@@ -39,7 +41,7 @@ double myatof (const char *p)
     }
     // Get sign, if any.
     sign = 1.0;
-    if (*p == '-') {
+     if (*p == '-') {
         sign = -1.0;
         p += 1;
     } else if (*p == '+') {
@@ -77,7 +79,7 @@ double myatof (const char *p)
         for (expon = 0; valid_digit(*p); p += 1) {
             expon = expon * 10 + (*p - '0');
         }
-        if (expon > 308) expon = 308;
+         if (expon > 308) expon = 308;
         // Calculate scaling factor.
         while (expon >= 50) { scale *= 1E50; expon -= 50; }
         while (expon >=  8) { scale *= 1E8;  expon -=  8; }
@@ -99,7 +101,9 @@ enum {
   LAT = 0x1,
   LON = 0X2,
   SH = 0x3,
-  DD = 0x4
+  DD = 0x4,
+  HN = 0x5,
+  MP = 0x6
 };
 
 void in_received_handler(DictionaryIterator *received, void *ctx) {
@@ -107,13 +111,15 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
   Tuple *longitude = dict_find(received, LON);
   Tuple *second_hand = dict_find(received, SH);
   Tuple *digital_display = dict_find(received, DD);
+  Tuple *hour_numbers = dict_find(received, HN);
+  Tuple *moon_phase = dict_find(received, MP);
 
   if (latitude && longitude) {
     lat = myatof(latitude->value->cstring);
     lon = myatof(longitude->value->cstring);
     
     // this is really rough... don't know how well it will actually work
-    // in different parts of the world...
+     // in different parts of the world...
     
     tz = round((lon * 24) / 360);
 
@@ -151,7 +157,31 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
     }
     else {
       setting_digital_display = false;
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling digital display.");
+       APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling digital display.");
+    }
+  }
+  if (hour_numbers) {
+    int hn = hour_numbers->value->uint32;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Hour numbers config option present: %d.", (int) hn);
+    if (hn == 1) { 
+      setting_hour_numbers = true;
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Enabling hour numbers display.");
+    }
+    else {
+      setting_hour_numbers = false;
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling hour numbers display.");
+    }
+  }
+  if (moon_phase) {
+    int mp = moon_phase->value->uint32;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Moon phase config option present: %d.", (int) mp);
+    if (mp == 1) { 
+      setting_moon_phase = true;
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Enabling moon phase display.");
+    }
+    else {
+      setting_moon_phase = false;
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling moon phase display.");
     }
   }
 }
@@ -308,39 +338,40 @@ static void face_layer_update_proc(Layer *layer, GContext *ctx) {
   /*************************
     DRAW TEXT FOR THIS LAYER
   **************************/
+  if (setting_hour_numbers) {
+    // draw hour text
+    struct tm fake_time;
+    char *time_format = "%l";
+    char hour_text[] = "12";
 
-  // draw hour text
-  struct tm fake_time;
-  char *time_format = "%l";
-  char hour_text[] = "12";
-
-  fake_time.tm_hour = 6;
-  strftime(hour_text, sizeof(hour_text), time_format, &fake_time);
-
-  // draw semi major hour text
-  fake_time.tm_hour = 6;
-  strftime(hour_text, sizeof(hour_text), time_format, &fake_time);
-
-  deg_step = 45;
-  for (int i=0;i<8;i++) {
-    float current_rads = rad_factor * (deg_step * i);
-    float x = 72 + 48 * (my_cos(current_rads));
-    float y = 84 + 48 * (my_sin(current_rads));
-    GPoint current_point;
-    current_point.x = (int16_t)x;
-    current_point.y = (int16_t)y;
-
-    draw_outlined_text(ctx,
-  		       hour_text,
-  		       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-  		       GRect(current_point.x-10, current_point.y-12, 20, 20),
-  		       GTextOverflowModeWordWrap,
-  		       GTextAlignmentCenter,
-  		       1,
-  		       false);
-    (fake_time.tm_hour == 12) ? fake_time.tm_hour = 0 : true;
-    fake_time.tm_hour += 3;
+    fake_time.tm_hour = 6;
     strftime(hour_text, sizeof(hour_text), time_format, &fake_time);
+
+    // draw semi major hour text
+    fake_time.tm_hour = 6;
+    strftime(hour_text, sizeof(hour_text), time_format, &fake_time);
+
+    deg_step = 45;
+    for (int i=0;i<8;i++) {
+      float current_rads = rad_factor * (deg_step * i);
+      float x = 72 + 48 * (my_cos(current_rads));
+      float y = 84 + 48 * (my_sin(current_rads));
+      GPoint current_point;
+      current_point.x = (int16_t)x;
+      current_point.y = (int16_t)y;
+
+      draw_outlined_text(ctx,
+			 hour_text,
+			 fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+			 GRect(current_point.x-10, current_point.y-12, 20, 20),
+			 GTextOverflowModeWordWrap,
+			 GTextAlignmentCenter,
+			 1,
+			 false);
+      (fake_time.tm_hour == 12) ? fake_time.tm_hour = 0 : true;
+      fake_time.tm_hour += 3;
+      strftime(hour_text, sizeof(hour_text), time_format, &fake_time);
+    }
   }
 }
 
@@ -581,62 +612,64 @@ int moon_phase(struct tm *time) {
 }
 
 static void moon_layer_update_proc(Layer* layer, GContext* ctx) {
-  time_t now_epoch = time(NULL);
-  struct tm *now = localtime(&now_epoch);
+  if (setting_moon_phase) {
+    time_t now_epoch = time(NULL);
+    struct tm *now = localtime(&now_epoch);
 
-  // don't do any calculations if they've already been done for today.
-  if (current_moon_day != now->tm_mday) {
-    phase = moon_phase(now);
-    // we don't have to calculate this again until tomorrow...
-    current_moon_day = now->tm_mday;
-  }
-
-  int moon_y = 108;  // y-axis position of the moon's center
-  int moon_r = 15;   // radius of the moon
-
-  // draw the moon...
-  if (position) {
-    if (phase != 27) {
-      graphics_context_set_fill_color(ctx,GColorWhite);
-      graphics_fill_circle(ctx, GPoint(72,moon_y), moon_r);
-    }
-    if (phase == 27 || phase == 0) {
-      graphics_context_set_stroke_color(ctx,GColorWhite);
-      graphics_draw_circle(ctx, GPoint(72,moon_y), moon_r);
+    // don't do any calculations if they've already been done for today.
+    if (current_moon_day != now->tm_mday) {
+      phase = moon_phase(now);
+      // we don't have to calculate this again until tomorrow...
+      current_moon_day = now->tm_mday;
     }
 
-    if (phase != 15 && phase != 27 ) { 
-      if (phase < 15) {
-	// draw the waxing occlusion...
-	graphics_context_set_fill_color(ctx,GColorBlack);
-	graphics_fill_circle(ctx, GPoint(72 - (phase * 6), moon_y), moon_r + (phase * 4));
+    int moon_y = 108;  // y-axis position of the moon's center
+    int moon_r = 15;   // radius of the moon
+
+    // draw the moon...
+    if (position) {
+      if (phase != 27) {
+	graphics_context_set_fill_color(ctx,GColorWhite);
+	graphics_fill_circle(ctx, GPoint(72,moon_y), moon_r);
+      }
+      if (phase == 27 || phase == 0) {
+	graphics_context_set_stroke_color(ctx,GColorWhite);
+	graphics_draw_circle(ctx, GPoint(72,moon_y), moon_r);
       }
 
-      if (phase > 15) {
-	// draw the waning occlusion...
-	int phase_factor = abs(phase-30);
-	graphics_context_set_fill_color(ctx,GColorBlack);
-	graphics_fill_circle(ctx, GPoint(((72-3) + (phase_factor * 6)), moon_y), moon_r + (phase_factor * 4));
+      if (phase != 15 && phase != 27 ) { 
+	if (phase < 15) {
+	  // draw the waxing occlusion...
+	  graphics_context_set_fill_color(ctx,GColorBlack);
+	  graphics_fill_circle(ctx, GPoint(72 - (phase * 6), moon_y), moon_r + (phase * 4));
+	}
+
+	if (phase > 15) {
+	  // draw the waning occlusion...
+	  int phase_factor = abs(phase-30);
+	  graphics_context_set_fill_color(ctx,GColorBlack);
+	  graphics_fill_circle(ctx, GPoint(((72-3) + (phase_factor * 6)), moon_y), moon_r + (phase_factor * 4));
+	}
       }
     }
-  }
 
-  // mask off the "daylight" portion of the watchface, otherwise, we
-  // see the occlusion circles where the "night" portion does not cover.
-  // This is probably the messiest bit of the watch app, since it assumes
-  // that a lot of things are happening in the right order to work...
-  GRect bounds = layer_get_bounds(layer);
-  GPoint center = grect_center_point(&bounds);
-  struct GPath *sun_path_moon_mask;
-  sun_path_moon_mask = gpath_create(&sun_path_moon_mask_info);
-  graphics_context_set_stroke_color(ctx, GColorBlack);
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  gpath_move_to(sun_path_moon_mask, center);
-  if (position) {
-    gpath_draw_outline(ctx, sun_path_moon_mask);
-    gpath_draw_filled(ctx, sun_path_moon_mask);
+    // mask off the "daylight" portion of the watchface, otherwise, we
+    // see the occlusion circles where the "night" portion does not cover.
+    // This is probably the messiest bit of the watch app, since it assumes
+    // that a lot of things are happening in the right order to work...
+    GRect bounds = layer_get_bounds(layer);
+    GPoint center = grect_center_point(&bounds);
+    struct GPath *sun_path_moon_mask;
+    sun_path_moon_mask = gpath_create(&sun_path_moon_mask_info);
+    graphics_context_set_stroke_color(ctx, GColorBlack);
+    graphics_context_set_fill_color(ctx, GColorWhite);
+    gpath_move_to(sun_path_moon_mask, center);
+    if (position) {
+      gpath_draw_outline(ctx, sun_path_moon_mask);
+      gpath_draw_filled(ctx, sun_path_moon_mask);
+    }
+    gpath_destroy(sun_path_moon_mask);
   }
-  gpath_destroy(sun_path_moon_mask);
 }
 
 static void window_unload(Window *window) {
@@ -678,8 +711,11 @@ static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
 }
 
 static void init(void) {
-  if (persist_exists(SH)) {
+  if (persist_exists(SH)) { // FIXME
     setting_second_hand = persist_read_bool(SH);
+    setting_digital_display = persist_read_bool(DD);
+    setting_hour_numbers = persist_read_bool(HN);
+    setting_moon_phase = persist_read_bool(MP);
   }
 
   app_message_register_inbox_received(in_received_handler);
@@ -704,6 +740,9 @@ static void init(void) {
 
 static void deinit(void) {
   persist_write_bool(SH, setting_second_hand);
+  persist_write_bool(DD, setting_digital_display);
+  persist_write_bool(HN, setting_hour_numbers);
+  persist_write_bool(MP, setting_moon_phase);
 
   layer_remove_from_parent(moon_layer);
   layer_remove_from_parent(hand_layer);
