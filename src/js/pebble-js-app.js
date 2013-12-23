@@ -20,3 +20,21 @@ function coords(position) {
 		       function(e) { console.log("Unsuccessfully delivered message with transactionId="
 						 + e.data.transactionId); });
 }
+
+Pebble.addEventListener("showConfiguration", function(e) {
+    console.log("Configuration window launching...");
+    Pebble.openURL("http://192.168.0.82/sunset-watch-config.html");
+});
+
+Pebble.addEventListener("webviewclosed", function(e) {
+    console.log("Configuration closed");
+    console.log(e.response);
+    if (e.response) {
+	var options = JSON.parse(decodeURIComponent(e.response));
+	console.log("Options = " + JSON.stringify(options));
+	Pebble.sendAppMessage( options );
+    }
+    else {
+	console.log("User clicked cancel.");
+    }
+});

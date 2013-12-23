@@ -18,6 +18,10 @@ double lat;
 double lon;
 double tz;
 bool position = false;
+bool setting_second_hand = true; // show second hand by default
+                                 // will be disabled if a setting already exists.
+bool setting_digital_display = true; // show second hand by default
+                                 // will be disabled if a setting already exists.
 
 // Since compilation fails using the standard `atof',
 // the following `myatof' implementation taken from:
@@ -94,11 +98,15 @@ double round(double number)
 enum {
   LAT = 0x1,
   LON = 0X2,
+  SH = 0x3,
+  DD = 0x4
 };
 
 void in_received_handler(DictionaryIterator *received, void *ctx) {
   Tuple *latitude = dict_find(received, LAT);
   Tuple *longitude = dict_find(received, LON);
+  Tuple *second_hand = dict_find(received, SH);
+  Tuple *digital_display = dict_find(received, DD);
 
   if (latitude && longitude) {
     lat = myatof(latitude->value->cstring);
@@ -120,6 +128,31 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
     // to see the new masks.
     layer_mark_dirty(face_layer);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Redrawing...");
+  }
+
+  if (second_hand) {
+    int sh = second_hand->value->uint32;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Second hand config option present: %d.", (int) sh);
+    if (sh == 1) { 
+      setting_second_hand = true;
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Enabling second hand.");
+    }
+    else {
+      setting_second_hand = false;
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling second hand.");
+    }
+  }
+  if (digital_display) {
+    int dd = digital_display->value->uint32;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Digital display config option present: %d.", (int) dd);
+    if (dd == 1) { 
+      setting_digital_display = true;
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Enabling digital display.");
+    }
+    else {
+      setting_digital_display = false;
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling digital display.");
+    }
   }
 }
 
@@ -278,7 +311,7 @@ static void face_layer_update_proc(Layer *layer, GContext *ctx) {
 
   // draw hour text
   struct tm fake_time;
-  char *time_format = "%l";  
+  char *time_format = "%l";
   char hour_text[] = "12";
 
   fake_time.tm_hour = 6;
@@ -347,18 +380,19 @@ static void hand_layer_update_proc(Layer* layer, GContext* ctx) {
   gpath_rotate_to(p_hour_hand, TRIG_MAX_ANGLE / 360 * hour_angle);
   gpath_draw_filled(ctx, p_hour_hand);
   gpath_draw_outline(ctx, p_hour_hand);
+  gpath_destroy(p_hour_hand);
 
   // draw the second hand
-  graphics_context_set_stroke_color(ctx, GColorBlack);
-  p_second_hand = gpath_create(&p_second_hand_info);
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  gpath_move_to(p_second_hand, center);
-  gpath_rotate_to(p_second_hand, TRIG_MAX_ANGLE / 360 * second_angle);
-  gpath_draw_filled(ctx, p_second_hand);
-  gpath_draw_outline(ctx, p_second_hand);
-
-  gpath_destroy(p_hour_hand);
-  gpath_destroy(p_second_hand);
+  if (setting_second_hand) {
+    graphics_context_set_stroke_color(ctx, GColorBlack);
+    p_second_hand = gpath_create(&p_second_hand_info);
+    graphics_context_set_fill_color(ctx, GColorWhite);
+    gpath_move_to(p_second_hand, center);
+    gpath_rotate_to(p_second_hand, TRIG_MAX_ANGLE / 360 * second_angle);
+    gpath_draw_filled(ctx, p_second_hand);
+    gpath_draw_outline(ctx, p_second_hand);
+    gpath_destroy(p_second_hand);
+  }
 }
 
 GPathInfo sun_path_moon_mask_info = {
@@ -419,6 +453,7 @@ static void sunlight_layer_update_proc(Layer* layer, GContext* ctx) {
     gpath_draw_outline(ctx, sun_path);
     gpath_draw_filled(ctx, sun_path);
   }
+  gpath_destroy(sun_path);
 }
 
 static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
@@ -431,7 +466,13 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   static char time_text[] = "     ";
   static char month_text[] = "   ";
   static char day_text[] = "  ";
-  char *time_format = "%l:%M";
+  char *time_format;
+  if (clock_is_24h_style()) {
+    time_format = "%H:%M";
+  }
+  else {
+    time_format = "%l:%M";
+  }
   char *month_format = "%b";
   char *day_format = "%e";
   char *ellipsis = ".....";
@@ -451,16 +492,17 @@ static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   }
 
   // draw current time
-  strftime(time_text, sizeof(time_text), time_format, now);
-  draw_outlined_text(ctx,
-		     time_text,
-		     fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
-		     GRect(42, 47, 64, 32),
-  		     GTextOverflowModeWordWrap,
-  		     GTextAlignmentCenter,
-		     1,
-		     false);
-
+  if (setting_digital_display) {
+    strftime(time_text, sizeof(time_text), time_format, now);
+    draw_outlined_text(ctx,
+		       time_text,
+		       fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
+		       GRect(42, 47, 64, 32),
+		       GTextOverflowModeWordWrap,
+		       GTextAlignmentCenter,
+		       1,
+		       false);
+  }
   // print sunrise/sunset times (if we can calculate our position)
   sunrise_time->tm_min = (int)(60*(sunriseTime-((int)(sunriseTime))));
   sunrise_time->tm_hour = (int)sunriseTime - 12;
@@ -594,6 +636,7 @@ static void moon_layer_update_proc(Layer* layer, GContext* ctx) {
     gpath_draw_outline(ctx, sun_path_moon_mask);
     gpath_draw_filled(ctx, sun_path_moon_mask);
   }
+  gpath_destroy(sun_path_moon_mask);
 }
 
 static void window_unload(Window *window) {
@@ -635,6 +678,10 @@ static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
 }
 
 static void init(void) {
+  if (persist_exists(SH)) {
+    setting_second_hand = persist_read_bool(SH);
+  }
+
   app_message_register_inbox_received(in_received_handler);
   app_message_register_inbox_dropped(in_dropped_handler);
   //  app_message_register_outbox_sent(out_sent_handler);
@@ -656,6 +703,8 @@ static void init(void) {
 }
 
 static void deinit(void) {
+  persist_write_bool(SH, setting_second_hand);
+
   layer_remove_from_parent(moon_layer);
   layer_remove_from_parent(hand_layer);
   layer_remove_from_parent(sunlight_layer);

@@ -2,7 +2,7 @@
   "uuid": "89cf7751-1be0-4811-973e-a24f9961b7c5",
   "shortName": "Sunset Watch",
   "longName": "Sunset Watch",
-  "capabilities": [ "location" ],
+  "capabilities": [ "location", "configurable" ],
   "companyName": "Smognus",
   "versionCode": 1,
   "versionLabel": "1.0.0",
@@ -11,7 +11,9 @@
   },
   "appKeys": {
     "latitude": 1,
-    "longitude": 2
+    "longitude": 2,
+    "second_hand": 3,
+    "digital_display": 4
   },
   "resources": {
     "media": []
