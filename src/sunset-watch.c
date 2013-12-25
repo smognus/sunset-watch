@@ -9,6 +9,7 @@ static Layer *hand_layer;
 static Layer *sunlight_layer;
 static Layer *sunrise_sunset_text_layer;
 static Layer *moon_layer;
+static Layer *battery_layer;
 int current_sunrise_sunset_day = -1;
 int current_moon_day = -1;
 float sunriseTime;
@@ -18,12 +19,13 @@ double lat;
 double lon;
 double tz;
 bool position = false;
-bool setting_second_hand = true; // show second hand by default
-                                 // will be disabled if a setting already exists.
-bool setting_digital_display = true; // show digital display by default
-                                 // will be disabled if a setting already exists.
+
+bool setting_second_hand = false;
+bool setting_digital_display = true;
 bool setting_hour_numbers = true;
 bool setting_moon_phase = true;
+bool setting_battery_status = true;
+bool setting_daylight_savings = false;
 
 // Since compilation fails using the standard `atof',
 // the following `myatof' implementation taken from:
@@ -103,7 +105,9 @@ enum {
   SH = 0x3,
   DD = 0x4,
   HN = 0x5,
-  MP = 0x6
+  MP = 0x6,
+  BS = 0x7, // ha ha, `BS'...
+  DS = 0x8
 };
 
 void in_received_handler(DictionaryIterator *received, void *ctx) {
@@ -113,17 +117,17 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
   Tuple *digital_display = dict_find(received, DD);
   Tuple *hour_numbers = dict_find(received, HN);
   Tuple *moon_phase = dict_find(received, MP);
+  Tuple *battery_status = dict_find(received, BS);
+  Tuple *daylight_savings = dict_find(received, DS);
 
   if (latitude && longitude) {
     lat = myatof(latitude->value->cstring);
     lon = myatof(longitude->value->cstring);
-    
-    // this is really rough... don't know how well it will actually work
-     // in different parts of the world...
-    
-    tz = round((lon * 24) / 360);
-
     position = true;
+
+    // this is really rough... don't know how well it will actually work
+    // in different parts of the world...
+    tz = round((lon * 24) / 360);
 
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", latitude->value->cstring);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", longitude->value->cstring);
@@ -136,54 +140,17 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Redrawing...");
   }
 
-  if (second_hand) {
-    int sh = second_hand->value->uint32;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Second hand config option present: %d.", (int) sh);
-    if (sh == 1) { 
-      setting_second_hand = true;
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Enabling second hand.");
-    }
-    else {
-      setting_second_hand = false;
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling second hand.");
-    }
+  if (second_hand && digital_display &&
+      hour_numbers && moon_phase && battery_status && daylight_savings) {
+    setting_second_hand = (second_hand->value->uint32 == 1) ? true : false;
+    setting_digital_display = (digital_display->value->uint32 == 1) ? true : false;
+    setting_hour_numbers = (hour_numbers->value->uint32  == 1) ? true : false;
+    setting_moon_phase = (moon_phase->value->uint32 == 1) ? true : false;
+    setting_battery_status = (battery_status->value->uint32  == 1) ? true : false;
+    setting_daylight_savings = (daylight_savings->value->uint32  == 1) ? true : false;
   }
-  if (digital_display) {
-    int dd = digital_display->value->uint32;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Digital display config option present: %d.", (int) dd);
-    if (dd == 1) { 
-      setting_digital_display = true;
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Enabling digital display.");
-    }
-    else {
-      setting_digital_display = false;
-       APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling digital display.");
-    }
-  }
-  if (hour_numbers) {
-    int hn = hour_numbers->value->uint32;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Hour numbers config option present: %d.", (int) hn);
-    if (hn == 1) { 
-      setting_hour_numbers = true;
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Enabling hour numbers display.");
-    }
-    else {
-      setting_hour_numbers = false;
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling hour numbers display.");
-    }
-  }
-  if (moon_phase) {
-    int mp = moon_phase->value->uint32;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Moon phase config option present: %d.", (int) mp);
-    if (mp == 1) { 
-      setting_moon_phase = true;
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Enabling moon phase display.");
-    }
-    else {
-      setting_moon_phase = false;
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Disabling moon phase display.");
-    }
-  }
+  // next line forces recalculation of sunrise/sunset times (useful when DS option is changed).
+  current_sunrise_sunset_day = -1;
 }
 
 void in_dropped_handler(AppMessageResult reason, void *context) {
@@ -194,6 +161,9 @@ void in_dropped_handler(AppMessageResult reason, void *context) {
 void adjustTimezone(float* time) 
 {
   int corrected_time = 12 + tz;
+  if (setting_daylight_savings) {
+    corrected_time += 1;
+  }
   *time += corrected_time;
     if (*time > 24) *time -= 24;
     if (*time < 0) *time += 24;
@@ -487,6 +457,25 @@ static void sunlight_layer_update_proc(Layer* layer, GContext* ctx) {
   gpath_destroy(sun_path);
 }
 
+static void battery_layer_update_proc(Layer* layer, GContext* ctx) {
+  if (setting_battery_status) {
+    char *battery_level_string = "100%";
+    int battery_level_int;
+    BatteryChargeState battery_state = battery_state_service_peek();
+    battery_level_int = battery_state.charge_percent;
+    snprintf(battery_level_string, sizeof(battery_level_string), "%d%%", battery_level_int);
+
+    draw_outlined_text(ctx,
+		       battery_level_string,
+		       fonts_get_system_font(FONT_KEY_GOTHIC_14),
+		       GRect(55, 153, 40, 40),
+		       GTextOverflowModeWordWrap,
+		       GTextAlignmentCenter,
+		       1,
+		       true);
+  }
+}
+
 static void sunrise_sunset_text_layer_update_proc(Layer* layer, GContext* ctx) {
   time_t now_epoch = time(NULL);
   struct tm *now = localtime(&now_epoch);
@@ -704,6 +693,12 @@ static void window_load(Window *window) {
   sunrise_sunset_text_layer = layer_create(bounds);
   layer_set_update_proc(sunrise_sunset_text_layer, &sunrise_sunset_text_layer_update_proc);
   layer_add_child(window_layer, sunrise_sunset_text_layer);
+  
+  // battery_layer
+  battery_layer = layer_create(bounds);
+  layer_set_update_proc(battery_layer, &battery_layer_update_proc);
+  layer_add_child(window_layer, battery_layer);
+
 }
 
 static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
@@ -711,20 +706,13 @@ static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
 }
 
 static void init(void) {
-  if (persist_exists(SH)) { // FIXME
-    setting_second_hand = persist_read_bool(SH);
-    setting_digital_display = persist_read_bool(DD);
-    setting_hour_numbers = persist_read_bool(HN);
-    setting_moon_phase = persist_read_bool(MP);
-  }
-
   app_message_register_inbox_received(in_received_handler);
   app_message_register_inbox_dropped(in_dropped_handler);
   //  app_message_register_outbox_sent(out_sent_handler);
   //  app_message_register_outbox_failed(out_failed_handler);
 
-  const uint32_t inbound_size = 64;
-  const uint32_t outbound_size = 64;
+  const uint32_t inbound_size = 96;
+  const uint32_t outbound_size = 96;
   app_message_open(inbound_size, outbound_size);
 
   window = window_create();
@@ -736,6 +724,20 @@ static void init(void) {
   window_stack_push(window, animated);
 
   tick_timer_service_subscribe(SECOND_UNIT, handle_minute_tick);
+
+  if (persist_exists(SH) &&
+      persist_exists(DD) &&
+      persist_exists(HN) &&
+      persist_exists(MP) &&
+      persist_exists(BS) &&
+      persist_exists(DS)) {
+    setting_second_hand = persist_read_bool(SH);
+    setting_digital_display = persist_read_bool(DD);
+    setting_hour_numbers = persist_read_bool(HN);
+    setting_moon_phase = persist_read_bool(MP);
+    setting_battery_status = persist_read_bool(BS);
+    setting_daylight_savings = persist_read_bool(DS);
+  }
 }
 
 static void deinit(void) {
@@ -743,18 +745,22 @@ static void deinit(void) {
   persist_write_bool(DD, setting_digital_display);
   persist_write_bool(HN, setting_hour_numbers);
   persist_write_bool(MP, setting_moon_phase);
+  persist_write_bool(BS, setting_battery_status);
+  persist_write_bool(DS, setting_daylight_savings);
 
   layer_remove_from_parent(moon_layer);
   layer_remove_from_parent(hand_layer);
   layer_remove_from_parent(sunlight_layer);
   layer_remove_from_parent(sunrise_sunset_text_layer);
   layer_remove_from_parent(face_layer);
+  layer_remove_from_parent(battery_layer);
 
   layer_destroy(face_layer);
   layer_destroy(hand_layer);
   layer_destroy(sunlight_layer);
   layer_destroy(sunrise_sunset_text_layer);
   layer_destroy(moon_layer);
+  layer_destroy(battery_layer);
 
   window_destroy(window);
 }
