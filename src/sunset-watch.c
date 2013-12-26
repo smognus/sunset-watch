@@ -19,6 +19,8 @@ double lat;
 double lon;
 double tz;
 bool position = false;
+int current_battery_charge = -1;
+char *battery_level_string = "100%";
 
 bool setting_second_hand = false;
 bool setting_digital_display = true;
@@ -96,6 +98,11 @@ double round(double number)
     return (number >= 0) ? (int)(number + 0.5) : (int)(number - 0.5);
 }
 
+static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) {
+  layer_mark_dirty(face_layer);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Tick: marking face_layer dirty...");
+}
+
 /******************
   APPMESSAGE STUFF
 *******************/
@@ -151,6 +158,15 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
   }
   // next line forces recalculation of sunrise/sunset times (useful when DS option is changed).
   current_sunrise_sunset_day = -1;
+
+  // if the second hand is enabled, we need to make sure the face updates on the appropriate tick event.
+  if (setting_second_hand) {
+    tick_timer_service_unsubscribe();
+    tick_timer_service_subscribe(SECOND_UNIT, handle_time_tick);
+  } else {
+    tick_timer_service_unsubscribe();
+    tick_timer_service_subscribe(MINUTE_UNIT, handle_time_tick);
+  }
 }
 
 void in_dropped_handler(AppMessageResult reason, void *context) {
@@ -236,6 +252,15 @@ static void draw_dot(GContext* ctx, GPoint center, int radius) {
   graphics_draw_circle(ctx, center, radius);
   graphics_context_set_stroke_color(ctx, GColorBlack);
   graphics_draw_circle(ctx, center, radius+1);
+}
+
+static void update_battery_percentage(BatteryChargeState c) {
+  if (setting_battery_status) {
+    int battery_level_int = c.charge_percent;
+    snprintf(battery_level_string, sizeof(battery_level_string), "%d%%", battery_level_int);
+    layer_mark_dirty(battery_layer);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Battery change: battery_layer marked dirty...");
+  }
 }
 
 static void face_layer_update_proc(Layer *layer, GContext *ctx) {
@@ -459,12 +484,6 @@ static void sunlight_layer_update_proc(Layer* layer, GContext* ctx) {
 
 static void battery_layer_update_proc(Layer* layer, GContext* ctx) {
   if (setting_battery_status) {
-    char *battery_level_string = "100%";
-    int battery_level_int;
-    BatteryChargeState battery_state = battery_state_service_peek();
-    battery_level_int = battery_state.charge_percent;
-    snprintf(battery_level_string, sizeof(battery_level_string), "%d%%", battery_level_int);
-
     draw_outlined_text(ctx,
 		       battery_level_string,
 		       fonts_get_system_font(FONT_KEY_GOTHIC_14),
@@ -701,15 +720,13 @@ static void window_load(Window *window) {
 
 }
 
-static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
-  layer_mark_dirty(face_layer);
-}
-
 static void init(void) {
   app_message_register_inbox_received(in_received_handler);
   app_message_register_inbox_dropped(in_dropped_handler);
   //  app_message_register_outbox_sent(out_sent_handler);
   //  app_message_register_outbox_failed(out_failed_handler);
+
+  battery_state_service_subscribe(update_battery_percentage);
 
   const uint32_t inbound_size = 96;
   const uint32_t outbound_size = 96;
@@ -723,8 +740,6 @@ static void init(void) {
   const bool animated = true;
   window_stack_push(window, animated);
 
-  tick_timer_service_subscribe(SECOND_UNIT, handle_minute_tick);
-
   if (persist_exists(SH) &&
       persist_exists(DD) &&
       persist_exists(HN) &&
@@ -737,7 +752,17 @@ static void init(void) {
     setting_moon_phase = persist_read_bool(MP);
     setting_battery_status = persist_read_bool(BS);
     setting_daylight_savings = persist_read_bool(DS);
+
+    if (setting_second_hand) {
+      tick_timer_service_subscribe(SECOND_UNIT, handle_time_tick);
+    }
+    else {
+      tick_timer_service_subscribe(MINUTE_UNIT, handle_time_tick);
+    }
   }
+
+  // get the _actual_ battery state (global variables set it up as if it were 100%).
+  update_battery_percentage(battery_state_service_peek());
 }
 
 static void deinit(void) {
