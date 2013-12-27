@@ -1,4 +1,4 @@
-var config_url = "http://192.168.0.82/sunset-watch-config.html"
+var config_url = "http://mtc.nfshost.com/sunset-watch-config.html"
 
 Pebble.addEventListener("ready",
     function(e) {
