@@ -1,7 +1,6 @@
 #include <pebble.h>
 #include "my_math.h"
 #include "suncalc.h"
-#include "config.h"
 
 static Window *window;
 static Layer *face_layer;
@@ -30,6 +29,9 @@ bool setting_battery_status = true;
 bool setting_daylight_savings = false;
 bool setting_manual_timezone = false;
 int  setting_manual_offset = -7;
+/* bool setting_manual_location = false; */
+/* double setting_manual_latitude = -111.0; */
+/* double setting_manual_longitude = 38.0; */
 
 // Since compilation fails using the standard `atof',
 // the following `myatof' implementation taken from:
@@ -118,7 +120,10 @@ enum {
   BS = 0x7, // ha ha, `BS'...
   DS = 0x8,
   MT = 0x9,
-  MO = 0xA
+  MO = 0xA,
+  /* ML = 0xB, */
+  /* MLAT = 0xC, */
+  /* MLON = 0xD */
 };
 
 void in_received_handler(DictionaryIterator *received, void *ctx) {
@@ -132,6 +137,9 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
   Tuple *daylight_savings = dict_find(received, DS);
   Tuple *manual_timezone = dict_find(received, MT);
   Tuple *manual_offset = dict_find(received, MO);
+  /* Tuple *manual_location = dict_find(received, ML); */
+  /* Tuple *manual_latitude = dict_find(received, MLAT); */
+  /* Tuple *manual_longitude = dict_find(received, MLON); */
 
   if (latitude && longitude) {
     lat = myatof(latitude->value->cstring);
@@ -140,7 +148,6 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
 
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", latitude->value->cstring);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", longitude->value->cstring);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Rough TZ: %d.", (int) tz);
 
     // without marking one of the layers dirty,
     // we have to wait until the next tick_event
@@ -149,29 +156,41 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Redrawing...");
   }
 
+  if (manual_timezone && manual_offset) {
+    setting_manual_timezone = (manual_timezone->value->uint32  == 1) ? true : false;
+    setting_manual_offset = manual_offset->value->int32;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, (setting_manual_timezone) ? "MT: true" : "MT: false");
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "MO: %d", setting_manual_offset);
+  }
+
+  /* if (manual_location && manual_latitude && manual_longitude) { */
+  /*   setting_manual_location = (manual_location->value->uint32  == 1) ? true : false; */
+  /*   setting_manual_latitude = myatof(manual_latitude->value->cstring); */
+  /*   setting_manual_longitude = myatof(manual_longitude->value->cstring); */
+  /*   APP_LOG(APP_LOG_LEVEL_DEBUG, (setting_manual_location) ? "ML: true" : "ML: false"); */
+  /*   APP_LOG(APP_LOG_LEVEL_DEBUG, "MLAT: %s", manual_latitude->value->cstring); */
+  /*   APP_LOG(APP_LOG_LEVEL_DEBUG, "MLON: %s", manual_longitude->value->cstring); */
+  /* } */
+
   if (second_hand && digital_display &&
-      hour_numbers && moon_phase && battery_status && daylight_savings &&
-      manual_timezone && manual_offset) {
+      hour_numbers && moon_phase && battery_status && daylight_savings) {
     setting_second_hand = (second_hand->value->uint32 == 1) ? true : false;
     setting_digital_display = (digital_display->value->uint32 == 1) ? true : false;
     setting_hour_numbers = (hour_numbers->value->uint32  == 1) ? true : false;
     setting_moon_phase = (moon_phase->value->uint32 == 1) ? true : false;
     setting_battery_status = (battery_status->value->uint32  == 1) ? true : false;
     setting_daylight_savings = (daylight_savings->value->uint32  == 1) ? true : false;
-    setting_manual_timezone = (manual_timezone->value->uint32  == 1) ? true : false;
-    setting_manual_offset = manual_offset->value->int32;
   }
-
-  APP_LOG(APP_LOG_LEVEL_DEBUG, (setting_manual_timezone) ? "true" : "false");
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "MO: %d", setting_manual_offset);
 
   // check if a manual timezone is configured; set it if it is.
   if (setting_manual_timezone) {
     tz = (double) setting_manual_offset;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "TZ (manual): %d.", (int) tz);
   } else {
     // this is really rough... don't know how well it will actually work
     // in different parts of the world...
     tz = round((lon * 24) / 360);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "TZ (auto): %d.", (int) tz);
   }
 
   // next line forces recalculation of sunrise/sunset times (in case DS/TZ option is changed).
@@ -191,6 +210,13 @@ void in_dropped_handler(AppMessageResult reason, void *context) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch dropped data.");
 }
 
+void out_sent_handler(DictionaryIterator *sent, void *ctx) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Message sent to phone.");
+}
+
+void out_failed_handler(DictionaryIterator *failed, AppMessageResult reason, void *ctx) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Message FAILED to send to phone.");
+}
 
 void adjustTimezone(float* time) 
 {
@@ -699,7 +725,6 @@ static void moon_layer_update_proc(Layer* layer, GContext* ctx) {
 }
 
 static void window_unload(Window *window) {
-
 }
 
 static void window_load(Window *window) {
@@ -741,14 +766,12 @@ static void window_load(Window *window) {
 static void init(void) {
   app_message_register_inbox_received(in_received_handler);
   app_message_register_inbox_dropped(in_dropped_handler);
-  //  app_message_register_outbox_sent(out_sent_handler);
-  //  app_message_register_outbox_failed(out_failed_handler);
+  app_message_register_outbox_sent(out_sent_handler);
+  app_message_register_outbox_failed(out_failed_handler);
 
   battery_state_service_subscribe(update_battery_percentage);
 
-  const uint32_t inbound_size = 96;
-  const uint32_t outbound_size = 96;
-  app_message_open(inbound_size, outbound_size);
+  app_message_open(app_message_inbox_size_maximum(),app_message_outbox_size_maximum());
 
   window = window_create();
   window_set_window_handlers(window, (WindowHandlers) {
@@ -757,6 +780,20 @@ static void init(void) {
   });
   const bool animated = true;
   window_stack_push(window, animated);
+
+  /* if (persist_exists(ML) && */
+  /*     persist_exists(MLAT) && */
+  /*     persist_exists(MLON)) { */
+  /*   setting_manual_location = persist_read_bool(ML); */
+  /*   // FIXME */
+  /*   //    setting_manual_latitude = atof(persist_read_string(MLAT)); */
+  /*   //    setting_manual_timezone = atof(persist_read_string(MLON)); */
+  /* } */
+
+  if (persist_exists(MT) && persist_exists(MO)) {
+      setting_manual_timezone = persist_read_bool(MT);
+      setting_manual_offset = persist_read_int(MO);
+    }
 
   if (persist_exists(SH) &&
       persist_exists(DD) &&
@@ -770,8 +807,6 @@ static void init(void) {
     setting_moon_phase = persist_read_bool(MP);
     setting_battery_status = persist_read_bool(BS);
     setting_daylight_savings = persist_read_bool(DS);
-    setting_manual_timezone = persist_read_bool(MT);
-    setting_manual_offset = persist_read_int(MO);
 
     APP_LOG(APP_LOG_LEVEL_DEBUG, (setting_manual_timezone) ? "true" : "false");
     APP_LOG(APP_LOG_LEVEL_DEBUG, "MO: %d", setting_manual_offset);
@@ -783,7 +818,6 @@ static void init(void) {
       tick_timer_service_subscribe(MINUTE_UNIT, handle_time_tick);
     }
   }
-
   // get the _actual_ battery state (global variables set it up as if it were 100%).
   update_battery_percentage(battery_state_service_peek());
 }
@@ -797,6 +831,9 @@ static void deinit(void) {
   persist_write_bool(DS, setting_daylight_savings);
   persist_write_bool(MT, setting_manual_timezone);
   persist_write_int(MO, setting_manual_offset);
+  /* persist_write_bool(ML, setting_manual_location); */
+  /* persist_write_string(MLAT, snprintf(setting_manual_latitude)); */
+  /* persist_write_string(MLON, setting_manual_longitude); */
 
   layer_remove_from_parent(moon_layer);
   layer_remove_from_parent(hand_layer);
@@ -819,6 +856,8 @@ int main(void) {
   init();
 
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Done initializing, pushed window: %p", window);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Max inbox size: %d.", (int) app_message_inbox_size_maximum());
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Max outbox size: %d.", (int) app_message_outbox_size_maximum());
 
   app_event_loop();
   deinit();
