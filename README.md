@@ -1,15 +1,18 @@
 sunset-watch
 ============
 
-Pebble Sunrise/Sunset and Moon Phase Watch Face
+Pebble Sunset Watch Face
 
-It is a 24hour face with an hour hand and a second hand. Sunrise/sunset times are calculated, and the face is overlaid with with day/night masks. The phase of the moon is calculated and drawn in the night mask area. Sunrise and sunset times are in the bottom left and bottom right corners, respectiviely.
+This watchface grabs the user's location from the connected phone on init and calculates sunrise and sunset times for that location.  The appropriate portion of the 24-hour face will display black.  Additionally, an approximation of the current phase of the moon is drawn.
 
-This is a rewrite of the watchface at https://github.com/KarbonPebbler/KP_Sun_Moon_Vibe_Clock, which was badly broken by SDK changes. This version uses no bitmaps, and since the GCompOps aren't working for vector stuff yet, it does some truly silly stuff to simulate transparency.
-
-To make it work for your location, modify config.h for your Latitude and Longitude and Timezone.
-
-The original author is KarbonPebbler, and he adds the additional credits to his project:
+The watch face is configurable via a (hosted) html/js interface accessible from withing the Pebble phone application.  Configurable options are:
+- Whether or not there is a second hand.
+- Whether or not the phase of the moon is displayed.
+- Whether or not hour-marking numbers are displayed.
+- Whether or not the digital time is displayed.
+- Whether or not the remaining battery percentage is displayed.
+- Whether or not to account for DST when calculating sunrise/sunset times.
+- To calculate sunrise/sunset times based on a manually-configured timezone.
 
 - Michael Ehrmann (Boldo) for the original SunClock source
 - Chad Harp for the Almanac source
