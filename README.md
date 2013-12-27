@@ -14,6 +14,10 @@ The watch face is configurable via a (hosted) html/js interface accessible from 
 - Whether or not to account for DST when calculating sunrise/sunset times.
 - To calculate sunrise/sunset times based on a manually-configured timezone.
 
+This watchface idea, and a lot of the code, is from KarbonPebbler's watchface at: 
+http://www.mypebblefaces.com/apps/1528/2270/
+
+KarbonPebbler adds these additional credits to his source:
 - Michael Ehrmann (Boldo) for the original SunClock source
 - Chad Harp for the Almanac source
 - Dersie for beta testing the revised code
