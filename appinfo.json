@@ -17,7 +17,9 @@
     "hour_numbers": 5,
     "moon_phase": 6,
     "battery_status": 7,
-    "daylight_savings": 8
+    "daylight_savings": 8,
+    "tz_bool": 9,
+    "tz_offset": 10
   },
   "resources": {
     "media": []

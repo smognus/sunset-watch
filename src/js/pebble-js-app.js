@@ -23,7 +23,7 @@ function coords(position) {
 
 Pebble.addEventListener("showConfiguration", function(e) {
     console.log("Configuration window launching...");
-    Pebble.openURL("http://mtc.nfshost.com/sunset-watch-config.html");
+    Pebble.openURL("http://192.168.0.82/sunset-watch-config.html");
 });
 
 Pebble.addEventListener("webviewclosed", function(e) {

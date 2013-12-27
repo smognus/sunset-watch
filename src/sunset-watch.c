@@ -28,6 +28,8 @@ bool setting_hour_numbers = true;
 bool setting_moon_phase = true;
 bool setting_battery_status = true;
 bool setting_daylight_savings = false;
+bool setting_manual_timezone = false;
+int  setting_manual_offset = -7;
 
 // Since compilation fails using the standard `atof',
 // the following `myatof' implementation taken from:
@@ -114,7 +116,9 @@ enum {
   HN = 0x5,
   MP = 0x6,
   BS = 0x7, // ha ha, `BS'...
-  DS = 0x8
+  DS = 0x8,
+  MT = 0x9,
+  MO = 0xA
 };
 
 void in_received_handler(DictionaryIterator *received, void *ctx) {
@@ -126,15 +130,13 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
   Tuple *moon_phase = dict_find(received, MP);
   Tuple *battery_status = dict_find(received, BS);
   Tuple *daylight_savings = dict_find(received, DS);
+  Tuple *manual_timezone = dict_find(received, MT);
+  Tuple *manual_offset = dict_find(received, MO);
 
   if (latitude && longitude) {
     lat = myatof(latitude->value->cstring);
     lon = myatof(longitude->value->cstring);
     position = true;
-
-    // this is really rough... don't know how well it will actually work
-    // in different parts of the world...
-    tz = round((lon * 24) / 360);
 
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", latitude->value->cstring);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch received: %s.", longitude->value->cstring);
@@ -148,15 +150,31 @@ void in_received_handler(DictionaryIterator *received, void *ctx) {
   }
 
   if (second_hand && digital_display &&
-      hour_numbers && moon_phase && battery_status && daylight_savings) {
+      hour_numbers && moon_phase && battery_status && daylight_savings &&
+      manual_timezone && manual_offset) {
     setting_second_hand = (second_hand->value->uint32 == 1) ? true : false;
     setting_digital_display = (digital_display->value->uint32 == 1) ? true : false;
     setting_hour_numbers = (hour_numbers->value->uint32  == 1) ? true : false;
     setting_moon_phase = (moon_phase->value->uint32 == 1) ? true : false;
     setting_battery_status = (battery_status->value->uint32  == 1) ? true : false;
     setting_daylight_savings = (daylight_savings->value->uint32  == 1) ? true : false;
+    setting_manual_timezone = (manual_timezone->value->uint32  == 1) ? true : false;
+    setting_manual_offset = manual_offset->value->int32;
   }
-  // next line forces recalculation of sunrise/sunset times (useful when DS option is changed).
+
+  APP_LOG(APP_LOG_LEVEL_DEBUG, (setting_manual_timezone) ? "true" : "false");
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "MO: %d", setting_manual_offset);
+
+  // check if a manual timezone is configured; set it if it is.
+  if (setting_manual_timezone) {
+    tz = (double) setting_manual_offset;
+  } else {
+    // this is really rough... don't know how well it will actually work
+    // in different parts of the world...
+    tz = round((lon * 24) / 360);
+  }
+
+  // next line forces recalculation of sunrise/sunset times (in case DS/TZ option is changed).
   current_sunrise_sunset_day = -1;
 
   // if the second hand is enabled, we need to make sure the face updates on the appropriate tick event.
@@ -752,6 +770,11 @@ static void init(void) {
     setting_moon_phase = persist_read_bool(MP);
     setting_battery_status = persist_read_bool(BS);
     setting_daylight_savings = persist_read_bool(DS);
+    setting_manual_timezone = persist_read_bool(MT);
+    setting_manual_offset = persist_read_int(MO);
+
+    APP_LOG(APP_LOG_LEVEL_DEBUG, (setting_manual_timezone) ? "true" : "false");
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "MO: %d", setting_manual_offset);
 
     if (setting_second_hand) {
       tick_timer_service_subscribe(SECOND_UNIT, handle_time_tick);
@@ -772,6 +795,8 @@ static void deinit(void) {
   persist_write_bool(MP, setting_moon_phase);
   persist_write_bool(BS, setting_battery_status);
   persist_write_bool(DS, setting_daylight_savings);
+  persist_write_bool(MT, setting_manual_timezone);
+  persist_write_int(MO, setting_manual_offset);
 
   layer_remove_from_parent(moon_layer);
   layer_remove_from_parent(hand_layer);
