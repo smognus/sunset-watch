@@ -793,6 +793,7 @@ static void init(void) {
   if (persist_exists(LAT) && persist_exists(LON)) {
     persist_read_data(LAT, &lat, sizeof(lat));
     persist_read_data(LON, &lon, sizeof(lon));
+    APP_LOG(APP_LOG_LEVEL_DEBUG,"read persisted lat and lon (%d, %d)", (int)lat, (int)lon);
     position = true;
   }
 
@@ -829,8 +830,10 @@ static void init(void) {
 }
 
 static void deinit(void) {
-  persist_write_data(LAT, &lat, sizeof(lat));
-  persist_write_data(LON, &lon, sizeof(lon));
+  if (position) {
+    persist_write_data(LAT, &lat, sizeof(lat));
+    persist_write_data(LON, &lon, sizeof(lon));
+  }
   persist_write_bool(SH, setting_second_hand);
   persist_write_bool(DD, setting_digital_display);
   persist_write_bool(HN, setting_hour_numbers);
