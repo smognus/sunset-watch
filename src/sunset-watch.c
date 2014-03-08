@@ -793,6 +793,7 @@ static void init(void) {
   if (persist_exists(LAT) && persist_exists(LON)) {
     persist_read_data(LAT, &lat, sizeof(lat));
     persist_read_data(LON, &lon, sizeof(lon));
+    // Apparently the log routine doesn't know how to format for floats
     APP_LOG(APP_LOG_LEVEL_DEBUG,"read persisted lat and lon (%d, %d)", (int)lat, (int)lon);
     position = true;
   }
