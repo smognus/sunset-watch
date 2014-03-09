@@ -502,6 +502,8 @@ static void sunlight_layer_update_proc(Layer* layer, GContext* ctx) {
   adjustTimezone(&sunriseTime);
   adjustTimezone(&sunsetTime);
 
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Sunrise time: %d   Sunset time: %d", (int) round(sunriseTime), (int) round(sunsetTime));
+
   sun_path_info.points[1].x = (int16_t)(my_sin(sunriseTime/24 * M_PI * 2) * 120);
   sun_path_info.points[1].y = -(int16_t)(my_cos(sunriseTime/24 * M_PI * 2) * 120);
 
@@ -790,6 +792,18 @@ static void init(void) {
   /*   //    setting_manual_timezone = atof(persist_read_string(MLON)); */
   /* } */
 
+  if (persist_exists(LAT) && persist_exists(LON)) {
+    persist_read_data(LAT, &lat, sizeof(lat));
+    persist_read_data(LON, &lon, sizeof(lon));
+    // Apparently the log routine doesn't know how to format for floats
+    APP_LOG(APP_LOG_LEVEL_DEBUG,"read persisted lat and lon (%d, %d)", (int)lat, (int)lon);
+    if (!setting_manual_timezone) {
+      tz = round((lon * 24) / 360);
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "TZ (auto): %d.", (int) tz);
+    }
+    position = true;
+  }
+
   if (persist_exists(MT) && persist_exists(MO)) {
       setting_manual_timezone = persist_read_bool(MT);
       setting_manual_offset = persist_read_int(MO);
@@ -823,6 +837,10 @@ static void init(void) {
 }
 
 static void deinit(void) {
+  if (position) {
+    persist_write_data(LAT, &lat, sizeof(lat));
+    persist_write_data(LON, &lon, sizeof(lon));
+  }
   persist_write_bool(SH, setting_second_hand);
   persist_write_bool(DD, setting_digital_display);
   persist_write_bool(HN, setting_hour_numbers);
