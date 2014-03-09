@@ -502,6 +502,8 @@ static void sunlight_layer_update_proc(Layer* layer, GContext* ctx) {
   adjustTimezone(&sunriseTime);
   adjustTimezone(&sunsetTime);
 
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Sunrise time: %d   Sunset time: %d", (int) round(sunriseTime), (int) round(sunsetTime));
+
   sun_path_info.points[1].x = (int16_t)(my_sin(sunriseTime/24 * M_PI * 2) * 120);
   sun_path_info.points[1].y = -(int16_t)(my_cos(sunriseTime/24 * M_PI * 2) * 120);
 
@@ -795,6 +797,10 @@ static void init(void) {
     persist_read_data(LON, &lon, sizeof(lon));
     // Apparently the log routine doesn't know how to format for floats
     APP_LOG(APP_LOG_LEVEL_DEBUG,"read persisted lat and lon (%d, %d)", (int)lat, (int)lon);
+    if (!setting_manual_timezone) {
+      tz = round((lon * 24) / 360);
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "TZ (auto): %d.", (int) tz);
+    }
     position = true;
   }
 
